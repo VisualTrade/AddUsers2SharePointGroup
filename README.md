@@ -67,16 +67,27 @@ Conditional Access, and sign-in logs for this add-in.
    The add-in runs on user desktops and cannot keep a client secret, so it must be a
    public client.
 5. Go to **API permissions > Add a permission > SharePoint > Delegated permissions** and
-   add **AllSites.FullControl**.
-6. Click **Grant admin consent for \<your tenant\>**.
+   add **AllSites.Manage** — it does not require admin consent in most tenants.
+   (`AllSites.FullControl` is a stronger ceiling — see the note below — but always
+   requires admin consent.)
+6. With `AllSites.Manage`, each user simply approves a consent prompt at their first
+   sign-in; an admin can still click **Grant admin consent for \<your tenant\>** to
+   pre-approve it for everyone. With `AllSites.FullControl`, admin consent is mandatory.
 7. From the **Overview** page copy the **Application (client) ID** and the
    **Directory (tenant) ID** — you will enter both in the add-in's Configure dialog.
 
-Note on delegated permissions: the app never gets standing access of its own.
-`AllSites.FullControl` is only the ceiling of what a token may do; every call still runs
-as the signed-in user and is limited by that user's actual SharePoint permissions. A user
-who cannot edit a group's membership in the browser cannot do it through the add-in
-either.
+Note on delegated permissions: the app never gets standing access of its own. The scope
+is only the ceiling of what a token may do; every call still runs as the signed-in user
+and is limited by that user's actual SharePoint permissions. A user who cannot edit a
+group's membership in the browser cannot do it through the add-in either.
+
+One nuance specific to `AllSites.Manage`: the token is capped below the site-level
+*Manage Permissions* right, but SharePoint lets a group's **owner** (or its members,
+when *"Who can edit the membership of the group?"* allows it) edit membership without
+that right — and that path stays open under the Manage cap. So make sure the people
+using the add-in own the target group (or the group allows member edits). A site admin
+who is *not* the group owner needs `AllSites.FullControl` for their site-level rights
+to flow through.
 
 ## 2. Build
 
@@ -302,7 +313,9 @@ update.
 
 **SharePoint errors**
 
-- *403 / "Access denied" when adding users* — the signed-in user lacks permission to edit
-  that group's membership. They need to be a site owner, or the group's *"Who can edit the
-  membership of the group?"* setting must include them. Remember: `AllSites.FullControl`
-  is delegated — it never grants more than the user already has.
+- *403 / "Access denied" when adding users* — the signed-in user cannot edit that group's
+  membership under the granted scope. With `AllSites.Manage`, make the user (or a group
+  they belong to) the **owner** of the target group, or set the group's *"Who can edit
+  the membership of the group?"* to include them. With `AllSites.FullControl`, anyone who
+  can edit the membership in the browser can do it through the add-in. Delegated scopes
+  never grant more than the user already has.
