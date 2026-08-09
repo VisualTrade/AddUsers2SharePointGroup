@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui"
+          onLoad="Ribbon_Load"
+          loadImage="LoadImage">
+  <ribbon>
+    <tabs>
+      <tab idMso="TabMail">
+        <group id="AddUsersGroup" label="Add Users">
+          <button id="AddUsersButton"
+                  label="Add Users to Group"
+                  size="large"
+                  image="AddUsers32"
+                  screentip="Add Users to SharePoint Group"
+                  supertip="Resolves the recipients of the selected email and adds them to the configured SharePoint group."
+                  onAction="OnAddUsersClick" />
+          <button id="ConfigureButton"
+                  label="Configure"
+                  size="large"
+                  image="Configure32"
+                  screentip="Configure Add Users"
+                  supertip="Set the SharePoint site, group, and authentication options used when adding users."
+                  onAction="OnConfigureClick" />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

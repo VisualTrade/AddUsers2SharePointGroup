@@ -1,0 +1,21 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+publish/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Local tooling state
+.claude/settings.local.json
+
+# NuGet (PackageReference restores to the global cache; nothing local to keep)
+packages/
+
+# Signing keys stay out of the repo: machines that ran trust-cert.ps1 trust this
+# certificate, so its private key must never be published. Each dev machine creates
+# its own test cert (VS: project Properties > Signing > Create Test Certificate);
+# the distributable PUBLIC half lives in build\AddUsersTemporaryKey.cer.
+*.pfx
