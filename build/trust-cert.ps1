@@ -28,14 +28,21 @@
 #>
 [CmdletBinding()]
 param(
-    # Public certificate exported from AddUsers_TemporaryKey.pfx.
-    [string]$CerPath = (Join-Path $PSScriptRoot 'AddUsersTemporaryKey.cer')
+    # Public certificate exported from AddUsers_TemporaryKey.pfx. Defaults to the .cer
+    # next to this script, or to the current directory when the code runs outside a
+    # script file ($PSScriptRoot is empty then, e.g. lines pasted into a console).
+    [string]$CerPath
 )
 
 $ErrorActionPreference = 'Stop'
 
+if (-not $CerPath) {
+    $baseDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+    $CerPath = Join-Path $baseDir 'AddUsersTemporaryKey.cer'
+}
+
 if (-not (Test-Path $CerPath)) {
-    throw "Certificate file not found: $CerPath"
+    throw "Certificate file not found: $CerPath. Place AddUsersTemporaryKey.cer next to this script or pass -CerPath."
 }
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
