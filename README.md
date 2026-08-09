@@ -182,9 +182,11 @@ older source, since clients only ever move to a *newer* deployment version.
 > deployment manifest ... or its location is not trusted"* — for Internet-zone URLs,
 > Windows only offers the ClickOnce install prompt when the certificate chains to a
 > trusted root. On each machine, run `build\trust-cert.ps1` from an **elevated**
-> PowerShell (or push `build\AddUsersTemporaryKey.cer` to *Trusted Root Certification
-> Authorities* + *Trusted Publishers* via Intune/GPO). A CA-issued code-signing
-> certificate (section 8) removes this step.
+> PowerShell — the script is self-contained (the public certificate is embedded in
+> it), so it is the only file you need to copy. Alternatively push
+> `build\AddUsersTemporaryKey.cer` to *Trusted Root Certification Authorities* +
+> *Trusted Publishers* via Intune/GPO. A CA-issued code-signing certificate
+> (section 8) removes this step.
 
 Send users the URLs the script prints:
 
