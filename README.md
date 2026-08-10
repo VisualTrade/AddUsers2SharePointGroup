@@ -29,6 +29,7 @@ build\
   publish.ps1                 Build + ClickOnce publish + upload to Azure Blob Storage
   setup-azure.ps1             One-time creation of the Azure hosting resources
   trust-cert.ps1              Trusts the signing cert on a machine (run elevated; see section 6)
+  register-update-task.ps1    Per-user logon task that applies updates outside Outlook (section 7)
   AddUsersTemporaryKey.cer    Public half of the signing cert, for distribution to machines
   version.txt                 Last published version (created/managed by publish.ps1)
 ```
@@ -252,6 +253,21 @@ Rolling out an update is therefore just:
 
 Users get the new version on their next Outlook start — no reinstall, no notification
 emails. If the update server is unreachable, the installed version keeps working.
+
+> **Known limitation — apply updates outside Outlook.** The startup check runs *inside*
+> the Outlook process, and actually applying the update there can fail with *"Access to
+> the path ... is denied"*: the running Outlook (or a lingering `outlook.exe` from the
+> previous session) holds locks in the ClickOnce store. Clicking the `AddUsers.vsto`
+> link with Outlook closed always works — but the hands-off fix is a per-user scheduled
+> task that applies pending updates at logon (and daily), before Outlook is running:
+>
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File .\build\register-update-task.ps1
+> ```
+>
+> No admin rights needed. It runs `VSTOInstaller.exe /install <url> /silent` (silent
+> works because the certificate is in Trusted Publishers), so Outlook starts with the
+> new version already installed and its own startup check finds nothing to do.
 
 `MapFileExtensions=true` renames payload files (`.dll`, `.exe`, ...) to `*.deploy` in the
 deployment, so a static blob container can serve everything without executable-blocking
