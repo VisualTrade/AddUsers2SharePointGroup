@@ -464,12 +464,17 @@ elseif (-not $group.Ok) {
     $verdict.Add("CAUSE: the group '$GroupName' could not be read on this site ($($report.groupError)) - the add-in fails the same way before permissions even matter. FIX: check the group name configured in the add-in against Site settings > People and groups; it must match the group Title exactly (groups are per-site, so also confirm the configured SITE is the right one).")
 }
 elseif (-not $group.Data.CanCurrentUserEditMembership) {
-    $ownerFix = "FIX: in SharePoint (Site settings > People and groups > '$GroupName' > Settings) set the group OWNER to you or to a group you belong to (e.g. the site Owners group), or set 'Who can edit the membership of the group?' to Members and join the group. Alternatively switch the app registration to AllSites.FullControl (admin consent) so site-admin rights flow through."
-    if ($me.Data.IsSiteAdmin -and ($report.effectivePermissions['ManagePermissions'] -eq $false)) {
-        $verdict.Add("CAUSE: the AllSites.Manage cap strips site-level rights (ManagePermissions), and you are not the group's owner - so SharePoint denies membership edits even though you could do them in the browser as site admin. $ownerFix")
+    # Empirically verified (Merck tenant, 2026-08-09): under an app-scoped token
+    # SharePoint requires the APP's grant to cover security operations, and group
+    # membership is one. AllSites.Manage caps below that, so membership edits are
+    # denied even for group owners/members-with-edit who CAN do it in the browser.
+    $memberOfTarget = $null -ne ($myGroupList | Where-Object { $_.Id -eq $group.Data.Id })
+    $userSidePath = $iAmOwner -or ($group.Data.AllowMembersEditMembership -and $memberOfTarget) -or $me.Data.IsSiteAdmin
+    if ($userSidePath -and $scopes -notmatch 'AllSites\.FullControl') {
+        $verdict.Add("CAUSE: the app scope cap, not your rights. You have a user-side path to edit this membership (owner / member with AllowMembersEditMembership / site admin) - which is why the SharePoint UI works - but group-membership changes are SECURITY operations, and under an app token SharePoint also requires the APP's grant to cover them. AllSites.Manage caps below that. FIX: change the app registration's SharePoint delegated permission to AllSites.FullControl and have an admin grant consent (it stays delegated - the app can never exceed what you can already do in the browser), then restart Outlook.")
     }
     else {
-        $verdict.Add("CAUSE: this account cannot edit the group's membership (not the owner, and no un-capped site-level rights). $ownerFix")
+        $verdict.Add("CAUSE: this account has no path to edit the group's membership under this token. FIX: (1) the app registration needs delegated AllSites.FullControl (admin consent) - lesser scopes cannot perform membership changes at all - and (2) the signed-in user must be able to edit the membership in the browser: group owner, member with 'Who can edit the membership?' = Members, or site admin (Site settings > People and groups > '$GroupName' > Settings).")
     }
 }
 elseif ($report.Contains('ensureUser') -and -not $report.ensureUser.ok) {

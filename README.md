@@ -67,12 +67,15 @@ Conditional Access, and sign-in logs for this add-in.
    The add-in runs on user desktops and cannot keep a client secret, so it must be a
    public client.
 5. Go to **API permissions > Add a permission > SharePoint > Delegated permissions** and
-   add **AllSites.Manage** — it does not require admin consent in most tenants.
-   (`AllSites.FullControl` is a stronger ceiling — see the note below — but always
-   requires admin consent.)
-6. With `AllSites.Manage`, each user simply approves a consent prompt at their first
-   sign-in; an admin can still click **Grant admin consent for \<your tenant\>** to
-   pre-approve it for everyone. With `AllSites.FullControl`, admin consent is mandatory.
+   add **AllSites.FullControl**. This is a hard requirement, not a preference: group
+   membership changes are *security operations*, and SharePoint requires the app's own
+   grant to cover them. With any lesser scope (`AllSites.Manage`/`Write`) membership
+   edits are denied **even for users who own the group and can edit it in the browser**
+   — verified empirically against a production tenant.
+6. Click **Grant admin consent for \<your tenant\>** (FullControl always needs admin
+   consent). Talking points for your admin: the permission is *delegated only* — the
+   add-in has no standing access, every call runs as the signed-in user, and the token
+   can never do more than that user can already do in the SharePoint UI.
 7. From the **Overview** page copy the **Application (client) ID** and the
    **Directory (tenant) ID** — you will enter both in the add-in's Configure dialog.
 
@@ -81,13 +84,14 @@ is only the ceiling of what a token may do; every call still runs as the signed-
 and is limited by that user's actual SharePoint permissions. A user who cannot edit a
 group's membership in the browser cannot do it through the add-in either.
 
-One nuance specific to `AllSites.Manage`: the token is capped below the site-level
-*Manage Permissions* right, but SharePoint lets a group's **owner** (or its members,
-when *"Who can edit the membership of the group?"* allows it) edit membership without
-that right — and that path stays open under the Manage cap. So make sure the people
-using the add-in own the target group (or the group allows member edits). A site admin
-who is *not* the group owner needs `AllSites.FullControl` for their site-level rights
-to flow through.
+Why won't `AllSites.Manage` do, when group owners can edit membership in the browser
+without any site-level rights? Because app-token authorization is two-sided: the *user*
+must be allowed (owner status covers that), **and the app's grant must cover the
+operation class**. Group membership is a security operation, which only the FullControl
+scope covers — the owner special-case relaxes the user-side check, never the app-side
+one. In practice: with `AllSites.Manage`, `CanCurrentUserEditMembership` comes back
+false and every add fails with an authorization error, even for the group's owner.
+(`build\debug-permissions.ps1` demonstrates this from any affected machine.)
 
 ## 2. Build
 
@@ -321,9 +325,10 @@ update.
   pwsh -File .\debug-permissions.ps1 -SiteUrl <configured site> -ClientId <app id> `
       -GroupName '<configured group>' -TestEmail <a recipient that failed>
   ```
-- *403 / "Access denied" when adding users* — the signed-in user cannot edit that group's
-  membership under the granted scope. With `AllSites.Manage`, make the user (or a group
-  they belong to) the **owner** of the target group, or set the group's *"Who can edit
-  the membership of the group?"* to include them. With `AllSites.FullControl`, anyone who
-  can edit the membership in the browser can do it through the add-in. Delegated scopes
-  never grant more than the user already has.
+- *403 / "Access denied" when adding users* — two possibilities, in order of likelihood:
+  (1) the app registration's SharePoint delegated permission is not `AllSites.FullControl`
+  — lesser scopes cannot perform membership changes at all, regardless of the user's own
+  rights (see section 1); (2) the signed-in user cannot edit that group's membership even
+  in the browser — they need to be the group's owner, a member when *"Who can edit the
+  membership of the group?"* is set to Members, or a site admin. Delegated scopes never
+  grant more than the user already has.
