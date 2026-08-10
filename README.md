@@ -66,16 +66,32 @@ Conditional Access, and sign-in logs for this add-in.
 4. Still under **Authentication**, set **Allow public client flows** to **Yes** and save.
    The add-in runs on user desktops and cannot keep a client secret, so it must be a
    public client.
-5. Go to **API permissions > Add a permission > SharePoint > Delegated permissions** and
-   add **AllSites.FullControl**. This is a hard requirement, not a preference: group
-   membership changes are *security operations*, and SharePoint requires the app's own
-   grant to cover them. With any lesser scope (`AllSites.Manage`/`Write`) membership
-   edits are denied **even for users who own the group and can edit it in the browser**
-   — verified empirically against a production tenant.
-6. Click **Grant admin consent for \<your tenant\>** (FullControl always needs admin
-   consent). Talking points for your admin: the permission is *delegated only* — the
-   add-in has no standing access, every call runs as the signed-in user, and the token
-   can never do more than that user can already do in the SharePoint UI.
+5. Grant SharePoint permissions. Whichever model you choose, the app-side grant must
+   cover *security operations*: group membership changes are one, and with a lesser
+   app grant they are denied **even for users who own the group and can edit it in the
+   browser** — verified empirically against a production tenant. Two supported models:
+
+   - **Recommended — `Sites.Selected` (delegated) + a per-site FullControl grant.**
+     Under **API permissions > SharePoint > Delegated**, add **Sites.Selected** and
+     grant admin consent. Then an admin grants the app the FullControl *role* on each
+     site the add-in should manage:
+
+     ```powershell
+     Grant-PnPAzureADAppSitePermission -AppId <client-id> -DisplayName 'Add Users Outlook add-in' `
+         -Site https://tenant.sharepoint.com/sites/yoursite -Permissions FullControl
+     ```
+
+     The app then cannot touch any other site, and on granted sites it still acts only
+     as the signed-in user. Note: tenant-wide site *discovery* is not possible in this
+     model — users enter the granted site's full URL in the Configure dialog (the
+     add-in detects this automatically).
+   - **`AllSites.FullControl` (delegated) + admin consent.** Tenant-wide ceiling;
+     enables the Configure dialog's site-search dropdown across all sites the user can
+     access.
+
+6. Talking points for your admin in both models: the permission is *delegated only* —
+   the add-in has no standing access, every call runs as the signed-in user, and the
+   token can never do more than that user can already do in the SharePoint UI.
 7. From the **Overview** page copy the **Application (client) ID** and the
    **Directory (tenant) ID** — you will enter both in the add-in's Configure dialog.
 
@@ -87,11 +103,12 @@ group's membership in the browser cannot do it through the add-in either.
 Why won't `AllSites.Manage` do, when group owners can edit membership in the browser
 without any site-level rights? Because app-token authorization is two-sided: the *user*
 must be allowed (owner status covers that), **and the app's grant must cover the
-operation class**. Group membership is a security operation, which only the FullControl
-scope covers — the owner special-case relaxes the user-side check, never the app-side
-one. In practice: with `AllSites.Manage`, `CanCurrentUserEditMembership` comes back
-false and every add fails with an authorization error, even for the group's owner.
-(`build\debug-permissions.ps1` demonstrates this from any affected machine.)
+operation class**. Group membership is a security operation, which only a FullControl
+app grant covers — tenant-wide (`AllSites.FullControl`) or per-site (`Sites.Selected`
+with the FullControl role). The owner special-case relaxes the user-side check, never
+the app-side one. In practice: with `AllSites.Manage`, `CanCurrentUserEditMembership`
+comes back false and every add fails with an authorization error, even for the group's
+owner. (`build\debug-permissions.ps1` demonstrates this from any affected machine.)
 
 ## 2. Build
 
@@ -119,11 +136,15 @@ store"*, open the project's **Properties > Signing** tab and either re-select
 
 In Outlook, click **Configure** in the add-in's ribbon group:
 
-1. Enter the **Base URL** of your SharePoint tenant — e.g. `https://contoso.sharepoint.com`
-   (not a specific site), the **Client ID** from step 1, and optionally the **Tenant ID**
-   (leave empty to sign in against the multi-tenant `organizations` authority).
+1. Enter the **Site / base URL**: with `AllSites.*` permissions, the tenant base URL —
+   e.g. `https://contoso.sharepoint.com` — enables site discovery across the tenant;
+   with `Sites.Selected`, enter the **full URL of the granted site** — e.g.
+   `https://contoso.sharepoint.com/sites/yoursite`. Also enter the **Client ID** from
+   step 1 and optionally the **Tenant ID** (leave empty for the multi-tenant
+   `organizations` authority).
 2. Click **Load sites** — a browser window opens for sign-in, then the **Site** dropdown
-   fills with every site collection you can access (found via SharePoint search).
+   fills with every site collection you can access (found via SharePoint search), or,
+   under `Sites.Selected`, with the site you entered.
 3. Pick a site; the **Group** dropdown fills with that site's SharePoint groups.
 4. Pick the group and click **Save**.
 

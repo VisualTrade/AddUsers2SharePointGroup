@@ -139,6 +139,38 @@ namespace AddUsers.Services
             }
         }
 
+        /// <summary>
+        /// Loads a single site directly by URL — the discovery path for Sites.Selected
+        /// app grants, where tenant-wide search is not permitted and only explicitly
+        /// granted sites are reachable.
+        /// </summary>
+        public async Task<SiteInfo> GetSiteAsync(string siteUrl, string clientId, string tenantId)
+        {
+            if (string.IsNullOrWhiteSpace(siteUrl))
+                throw new ArgumentException("A site URL is required.", nameof(siteUrl));
+
+            try
+            {
+                using (ClientContext ctx = await GetContextAsync(clientId, tenantId, siteUrl.Trim().TrimEnd('/')).ConfigureAwait(false))
+                {
+                    Web web = ctx.Web;
+                    ctx.Load(web, w => w.Title, w => w.Url);
+                    await ctx.ExecuteQueryRetryAsync().ConfigureAwait(false);
+
+                    string url = web.Url.TrimEnd('/');
+                    return new SiteInfo
+                    {
+                        Title = string.IsNullOrEmpty(web.Title) ? url : web.Title,
+                        Url = url
+                    };
+                }
+            }
+            catch (Exception ex) when (IsAuthFailure(ex))
+            {
+                throw CreateAuthError(ex);
+            }
+        }
+
         /// <summary>Lists the site groups of the given site (Id and Title only), sorted by title.</summary>
         public async Task<List<GroupInfo>> GetGroupsAsync(string siteUrl, string clientId, string tenantId)
         {

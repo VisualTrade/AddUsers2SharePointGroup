@@ -88,7 +88,7 @@ namespace AddUsers.Forms
                 Margin = new Padding(0, 9, 0, 0)
             };
 
-            AddRow(table, "Base URL:", _baseUrlBox);
+            AddRow(table, "Site / base URL:", _baseUrlBox);
             AddRow(table, "Client ID:", _clientIdBox);
             AddRow(table, "Tenant ID (optional):", _tenantIdBox);
             AddRow(table, null, _loadSitesButton);
@@ -214,19 +214,47 @@ namespace AddUsers.Forms
 
             SetBusy(true);
             List<SiteInfo> sites = null;
+            string discoveryError = null;
             try
             {
                 // No ResetAuth here: the service caches AuthenticationManagers per
                 // (ClientId, TenantId), so changed credentials get a fresh sign-in
                 // automatically while repeat clicks reuse the cached MSAL token.
-                var loaded = await SharePointService.Instance.GetSitesAsync(baseUrl, clientId, tenantId);
-                sites = loaded.ToList();
-            }
-            catch (Exception ex)
-            {
-                if (!IsDisposed)
-                    MessageBox.Show(this, "Could not load sites:\r\n" + ex.Message,
-                        "Add Users", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                try
+                {
+                    var loaded = await SharePointService.Instance.GetSitesAsync(baseUrl, clientId, tenantId);
+                    sites = loaded.ToList();
+                }
+                catch (Exception ex)
+                {
+                    discoveryError = ex.Message;
+                }
+
+                // Tenant-wide discovery fails (or finds nothing) when the app grant is
+                // Sites.Selected — only explicitly granted sites are reachable. Fall
+                // back to treating the entered URL as the site itself.
+                if (sites == null || sites.Count == 0)
+                {
+                    try
+                    {
+                        var single = await SharePointService.Instance.GetSiteAsync(baseUrl, clientId, tenantId);
+                        sites = new List<SiteInfo> { single };
+                    }
+                    catch (Exception ex)
+                    {
+                        if (!IsDisposed)
+                        {
+                            var message = new System.Text.StringBuilder("Could not load sites.");
+                            if (discoveryError != null)
+                                message.Append("\r\n\r\nSite discovery: ").Append(discoveryError);
+                            message.Append("\r\n\r\nDirect site load: ").Append(ex.Message);
+                            message.Append("\r\n\r\nIf the app registration uses Sites.Selected, enter the FULL URL of a granted site (e.g. https://tenant.sharepoint.com/sites/yoursite).");
+                            MessageBox.Show(this, message.ToString(),
+                                "Add Users", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                        sites = null;
+                    }
+                }
             }
             finally
             {
