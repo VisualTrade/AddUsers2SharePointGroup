@@ -338,6 +338,14 @@ update.
 
 **SharePoint errors**
 
+- *Token still carries old scopes after changing API permissions* — the App registrations
+  blade lists what the app *requests*; consent grants live on the **Enterprise
+  application** (service principal), and removing a permission from the blade does NOT
+  revoke consent already given. `.default` tokens are built from the grants, so stale
+  scopes (e.g. `AllSites.Manage`) keep appearing — and keep governing enforcement —
+  until revoked. Fix: delete the Enterprise application for the app (App registration
+  survives) and re-grant admin consent, or delete the stale `Oauth2PermissionGrant`
+  records via Graph PowerShell, then grant admin consent for the current permissions.
 - *Authorization errors when adding users* — run `build\debug-permissions.ps1` (PowerShell 7)
   on the affected machine; it signs in with the same app registration, checks the token's
   actual scopes, the group's settings, and SharePoint's own membership-edit verdict, then
