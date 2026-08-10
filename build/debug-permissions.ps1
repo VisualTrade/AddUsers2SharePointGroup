@@ -59,8 +59,9 @@ param(
     [string]$ReportPath,
 
     # Override the requested token scope. Default is <resource>/.default, mirroring the
-    # add-in. Useful to isolate enforcement behavior, e.g. request ONLY the per-site
-    # model with: -Scope https://tenant.sharepoint.com/Sites.Selected
+    # add-in. NOTE: Entra issues access tokens carrying the UNION of all standing
+    # grants for the resource regardless of what subset is requested — a narrower
+    # request cannot exclude stale grants; only revoking them can.
     [string]$Scope
 )
 
@@ -279,6 +280,9 @@ $tokenInfo = [ordered]@{
 $report.defaultToken = [ordered]@{} + $tokenInfo
 Write-Info "Signed in as:  $($tokenInfo.user)  (tenant $($tokenInfo.tenant))"
 Write-Info "Token scopes:  $($tokenInfo.scopes)"
+if ($Scope -and ([string]$tokenInfo.scopes).Trim() -ne ($Scope -replace '^.*/', '')) {
+    Write-Info 'NOTE: the token contains more than the requested scope - Entra issues the union of all standing grants for the resource. To remove a scope from tokens, the underlying consent grant must be revoked on the Enterprise application.'
+}
 
 $consentFixedByRun = $false
 $scopes = [string]$tokenInfo.scopes
