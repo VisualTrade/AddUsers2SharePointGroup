@@ -7,7 +7,7 @@ using System.Security;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("Add Users")]
-[assembly: AssemblyDescription("Outlook add-in that adds the recipients of the selected email to a SharePoint site group.")]
+[assembly: AssemblyDescription("Outlook add-in that adds the sender and recipients of the selected email to a SharePoint site group.")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("VisualTrade")]
 [assembly: AssemblyProduct("Add Users")]

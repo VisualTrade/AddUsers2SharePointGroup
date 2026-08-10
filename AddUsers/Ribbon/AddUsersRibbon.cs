@@ -120,7 +120,7 @@ namespace AddUsers
 
                 try
                 {
-                    resolved = OutlookMailHelper.ResolveRecipientSmtpAddresses(mail, out unresolved);
+                    resolved = OutlookMailHelper.ResolveRecipientSmtpAddresses(mail, includeSender: true, out unresolved);
                 }
                 finally
                 {
@@ -130,7 +130,7 @@ namespace AddUsers
                 if (resolved.Count == 0 && unresolved.Count == 0)
                 {
                     MessageBox.Show(
-                        "The selected email has no recipients.",
+                        "No sender or recipients could be resolved from the selected email.",
                         Caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }

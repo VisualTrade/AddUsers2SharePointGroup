@@ -1,8 +1,9 @@
 # Add Users — Outlook add-in for SharePoint group membership
 
 A VSTO add-in for classic Outlook on Windows. Select an email, click **Add Users** on the
-ribbon, and the people on that message are added to a SharePoint Online site group of your
-choice. A results dialog shows what happened for each address. The **Configure** button
+ribbon, and the people on that message — the sender plus all To/CC recipients — are added
+to a SharePoint Online site group of your choice (BCC recipients are deliberately
+excluded). A results dialog shows what happened for each address. The **Configure** button
 stores the connection settings.
 
 The add-in signs in interactively as the current user through your own Microsoft Entra app

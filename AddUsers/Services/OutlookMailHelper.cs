@@ -16,6 +16,9 @@ namespace AddUsers.Services
         private const string PrSmtpAddress =
             "http://schemas.microsoft.com/mapi/proptag/0x39FE001E";
 
+        private const string PrSenderSmtpAddress =
+            "http://schemas.microsoft.com/mapi/proptag/0x5D01001F";
+
         private const int MaxDistributionListDepth = 8;
 
         /// <summary>
@@ -78,12 +81,14 @@ namespace AddUsers.Services
         }
 
         /// <summary>
-        /// Resolves every recipient of <paramref name="mail"/> to a distinct SMTP
-        /// address. Recipients that cannot be resolved are reported by display
-        /// name through <paramref name="unresolved"/>.
+        /// Resolves the sender (when <paramref name="includeSender"/> is true) and
+        /// every recipient of <paramref name="mail"/> to distinct SMTP addresses.
+        /// Participants that cannot be resolved are reported by display name
+        /// through <paramref name="unresolved"/>.
         /// </summary>
         public static List<string> ResolveRecipientSmtpAddresses(
             Outlook.MailItem mail,
+            bool includeSender,
             out List<string> unresolved)
         {
             if (mail == null)
@@ -95,6 +100,11 @@ namespace AddUsers.Services
             var seenAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var unresolvedNames = new List<string>();
             var seenUnresolved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (includeSender)
+            {
+                ResolveSender(mail, resolved, seenAddresses, unresolvedNames, seenUnresolved);
+            }
 
             Outlook.Recipients recipients = null;
             try
@@ -366,6 +376,159 @@ namespace AddUsers.Services
                 {
                     Release(member);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Resolves the sender through the same ladder as recipients: SMTP-type fast
+        /// path, AddressEntry resolution (Exchange users etc.), then the
+        /// PR_SENDER_SMTP_ADDRESS property on the item itself.
+        /// </summary>
+        private static void ResolveSender(
+            Outlook.MailItem mail,
+            List<string> resolved,
+            HashSet<string> seenAddresses,
+            List<string> unresolvedNames,
+            HashSet<string> seenUnresolved)
+        {
+            // Unsent items (drafts, Outbox) have no sender yet; do not report one missing.
+            try
+            {
+                if (!mail.Sent)
+                {
+                    return;
+                }
+            }
+            catch (COMException)
+            {
+            }
+
+            string senderName = null;
+            try
+            {
+                senderName = mail.SenderName;
+            }
+            catch (COMException)
+            {
+            }
+
+            string senderType = null;
+            try
+            {
+                senderType = mail.SenderEmailType;
+            }
+            catch (COMException)
+            {
+            }
+
+            if (string.Equals(senderType, "SMTP", StringComparison.OrdinalIgnoreCase))
+            {
+                string address = null;
+                try
+                {
+                    address = mail.SenderEmailAddress;
+                }
+                catch (COMException)
+                {
+                }
+
+                if (LooksLikeSmtp(address))
+                {
+                    AddResolved(address, resolved, seenAddresses);
+                    return;
+                }
+            }
+
+            Outlook.AddressEntry sender = null;
+            try
+            {
+                try
+                {
+                    sender = mail.Sender;
+                }
+                catch (COMException)
+                {
+                }
+
+                if (sender != null)
+                {
+                    Outlook.OlAddressEntryUserType senderEntryType;
+                    try
+                    {
+                        senderEntryType = sender.AddressEntryUserType;
+                    }
+                    catch (COMException)
+                    {
+                        senderEntryType = Outlook.OlAddressEntryUserType.olOtherAddressEntry;
+                    }
+
+                    // A distribution-list sender is never expanded into its membership
+                    // (one click would mass-add people unrelated to the conversation);
+                    // only the list's own address, via the item property below, is used.
+                    bool senderIsList =
+                        senderEntryType == Outlook.OlAddressEntryUserType.olExchangeDistributionListAddressEntry ||
+                        senderEntryType == Outlook.OlAddressEntryUserType.olOutlookDistributionListAddressEntry;
+
+                    if (!senderIsList)
+                    {
+                        // Fall through to the item-level property when entry resolution
+                        // yields nothing (e.g. a departed employee whose directory
+                        // object is gone) instead of stopping at "unresolved".
+                        int resolvedBefore = resolved.Count;
+                        int unresolvedBefore = unresolvedNames.Count;
+                        ResolveAddressEntry(
+                            sender, senderName, 0,
+                            resolved, seenAddresses,
+                            unresolvedNames, seenUnresolved);
+                        if (resolved.Count > resolvedBefore)
+                        {
+                            return;
+                        }
+                        while (unresolvedNames.Count > unresolvedBefore)
+                        {
+                            seenUnresolved.Remove(unresolvedNames[unresolvedNames.Count - 1]);
+                            unresolvedNames.RemoveAt(unresolvedNames.Count - 1);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                Release(sender);
+            }
+
+            string fallback = GetMailItemSmtpProperty(mail, PrSenderSmtpAddress);
+            if (LooksLikeSmtp(fallback))
+            {
+                AddResolved(fallback, resolved, seenAddresses);
+            }
+            else
+            {
+                AddUnresolved(
+                    string.IsNullOrWhiteSpace(senderName) ? "(unknown sender)" : senderName + " (sender)",
+                    unresolvedNames, seenUnresolved);
+            }
+        }
+
+        private static string GetMailItemSmtpProperty(Outlook.MailItem mail, string schema)
+        {
+            Outlook.PropertyAccessor accessor = null;
+            try
+            {
+                accessor = mail.PropertyAccessor;
+                return accessor.GetProperty(schema) as string;
+            }
+            catch (COMException)
+            {
+                return null;
+            }
+            catch (InvalidCastException)
+            {
+                return null;
+            }
+            finally
+            {
+                Release(accessor);
             }
         }
 

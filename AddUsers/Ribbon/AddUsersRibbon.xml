@@ -11,7 +11,7 @@
                   size="large"
                   image="AddUsers32"
                   screentip="Add Users to SharePoint Group"
-                  supertip="Resolves the recipients of the selected email and adds them to the configured SharePoint group."
+                  supertip="Resolves the sender and recipients of the selected email and adds them to the configured SharePoint group."
                   onAction="OnAddUsersClick" />
           <button id="ConfigureButton"
                   label="Configure"
