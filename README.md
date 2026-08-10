@@ -313,6 +313,14 @@ update.
 
 **SharePoint errors**
 
+- *Authorization errors when adding users* — run `build\debug-permissions.ps1` (PowerShell 7)
+  on the affected machine; it signs in with the same app registration, checks the token's
+  actual scopes, the group's settings, and SharePoint's own membership-edit verdict, then
+  prints the likely cause and writes a shareable JSON report:
+  ```powershell
+  pwsh -File .\debug-permissions.ps1 -SiteUrl <configured site> -ClientId <app id> `
+      -GroupName '<configured group>' -TestEmail <a recipient that failed>
+  ```
 - *403 / "Access denied" when adding users* — the signed-in user cannot edit that group's
   membership under the granted scope. With `AllSites.Manage`, make the user (or a group
   they belong to) the **owner** of the target group, or set the group's *"Who can edit
