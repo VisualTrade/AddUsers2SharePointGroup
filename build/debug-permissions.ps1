@@ -273,11 +273,14 @@ Write-Info "Token scopes:  $($tokenInfo.scopes)"
 
 $consentFixedByRun = $false
 $scopes = [string]$tokenInfo.scopes
-if ($scopes -match 'AllSites\.(Manage|FullControl)') {
+if ($scopes -match 'AllSites\.(Manage|FullControl)|Sites\.Selected') {
     Write-Good "Token carries $($Matches[0]) - consent is in place."
+    if ($Matches[0] -eq 'Sites.Selected') {
+        Write-Info '(Sites.Selected model: access works only on sites where an admin granted the app a role; membership edits need the FullControl role on the site. CanCurrentUserEditMembership below is the decisive check.)'
+    }
 }
 else {
-    Write-Bad "Token does NOT contain any AllSites scope. `.default` only includes ALREADY-CONSENTED permissions - consent likely predates the permission change on the app registration."
+    Write-Bad "Token contains neither an AllSites scope nor Sites.Selected. `.default` only includes ALREADY-CONSENTED permissions - consent likely predates the permission change on the app registration."
     Write-Step 'Sign-in 2: explicit AllSites.Manage with prompt=consent (attempting to establish consent)'
     try {
         $script:AccessToken = Get-InteractiveToken -Scope "$resource/AllSites.Manage" -Prompt 'consent'
@@ -457,8 +460,8 @@ if ($consentFixedByRun) {
     $verdict.Add("CAUSE FOUND (and fixed by this run): the `.default` token - the exact kind the add-in uses - carried NO AllSites scope, because consent predated the permission change on the app registration. Every SharePoint write was unauthorized regardless of your rights. Sign-in 2 established consent. FIX: restart Outlook so the add-in discards its cached scope-less token and acquires a fresh one, then retry.")
 }
 
-if ($scopes -notmatch 'AllSites\.(Manage|FullControl)') {
-    $verdict.Add('CAUSE: the token has no AllSites scope, so every SharePoint write is unauthorized regardless of your rights. FIX: consent could not be established even with an explicit request - if the error above mentions AADSTS65001/admin approval, your tenant requires an ADMIN to consent even for AllSites.Manage: have an admin open the app registration > API permissions > "Grant admin consent". Then restart Outlook.')
+if ($scopes -notmatch 'AllSites\.(Manage|FullControl)|Sites\.Selected') {
+    $verdict.Add('CAUSE: the token has no SharePoint scope (neither AllSites.* nor Sites.Selected), so every SharePoint call is unauthorized regardless of your rights. FIX: consent could not be established even with an explicit request - have an admin open the app registration > API permissions > "Grant admin consent". Then restart Outlook.')
 }
 elseif (-not $group.Ok) {
     $verdict.Add("CAUSE: the group '$GroupName' could not be read on this site ($($report.groupError)) - the add-in fails the same way before permissions even matter. FIX: check the group name configured in the add-in against Site settings > People and groups; it must match the group Title exactly (groups are per-site, so also confirm the configured SITE is the right one).")
@@ -471,10 +474,13 @@ elseif (-not $group.Data.CanCurrentUserEditMembership) {
     $memberOfTarget = $null -ne ($myGroupList | Where-Object { $_.Id -eq $group.Data.Id })
     $userSidePath = $iAmOwner -or ($group.Data.AllowMembersEditMembership -and $memberOfTarget) -or $me.Data.IsSiteAdmin
     if ($userSidePath -and $scopes -notmatch 'AllSites\.FullControl') {
-        $verdict.Add("CAUSE: the app scope cap, not your rights. You have a user-side path to edit this membership (owner / member with AllowMembersEditMembership / site admin) - which is why the SharePoint UI works - but group-membership changes are SECURITY operations, and under an app token SharePoint also requires the APP's grant to cover them. AllSites.Manage caps below that. FIX: change the app registration's SharePoint delegated permission to AllSites.FullControl and have an admin grant consent (it stays delegated - the app can never exceed what you can already do in the browser), then restart Outlook.")
+        $fix = ($scopes -match 'Sites\.Selected') `
+            ? "FIX: the app's per-site role on THIS site is below FullControl (or was granted on a different site). Have an admin re-grant it: Grant-PnPAzureADAppSitePermission -AppId <client-id> -Site $SiteUrl -Permissions FullControl (check current grants with Get-PnPAzureADAppSitePermission). Then restart Outlook." `
+            : "FIX: change the app registration's SharePoint delegated permission to AllSites.FullControl (admin consent), or to Sites.Selected with a FullControl role granted on this site. It stays delegated - the app can never exceed what you can already do in the browser. Then restart Outlook."
+        $verdict.Add("CAUSE: the app-side grant, not your rights. You have a user-side path to edit this membership (owner / member with AllowMembersEditMembership / site admin) - which is why the SharePoint UI works - but group-membership changes are SECURITY operations, and under an app token SharePoint also requires the APP's grant to cover them. $fix")
     }
     else {
-        $verdict.Add("CAUSE: this account has no path to edit the group's membership under this token. FIX: (1) the app registration needs delegated AllSites.FullControl (admin consent) - lesser scopes cannot perform membership changes at all - and (2) the signed-in user must be able to edit the membership in the browser: group owner, member with 'Who can edit the membership?' = Members, or site admin (Site settings > People and groups > '$GroupName' > Settings).")
+        $verdict.Add("CAUSE: this account has no path to edit the group's membership under this token. FIX: (1) the app-side grant must cover security operations - delegated AllSites.FullControl, or Sites.Selected with the FullControl role on this site - and (2) the signed-in user must be able to edit the membership in the browser: group owner, member with 'Who can edit the membership?' = Members, or site admin (Site settings > People and groups > '$GroupName' > Settings).")
     }
 }
 elseif ($report.Contains('ensureUser') -and -not $report.ensureUser.ok) {
