@@ -273,10 +273,17 @@ Write-Info "Token scopes:  $($tokenInfo.scopes)"
 
 $consentFixedByRun = $false
 $scopes = [string]$tokenInfo.scopes
+$spScopes = @([regex]::Matches($scopes, 'AllSites\.\w+|Sites\.Selected') | ForEach-Object { $_.Value } | Select-Object -Unique)
 if ($scopes -match 'AllSites\.(Manage|FullControl)|Sites\.Selected') {
-    Write-Good "Token carries $($Matches[0]) - consent is in place."
-    if ($Matches[0] -eq 'Sites.Selected') {
+    Write-Good ('Token carries: ' + ($spScopes -join ', ') + ' - consent is in place.')
+    if ($spScopes -contains 'Sites.Selected') {
         Write-Info '(Sites.Selected model: access works only on sites where an admin granted the app a role; membership edits need the FullControl role on the site. CanCurrentUserEditMembership below is the decisive check.)'
+        if (@($spScopes | Where-Object { $_ -like 'AllSites.*' }).Count -gt 0) {
+            Write-Info 'NOTE: the token carries BOTH AllSites.* and Sites.Selected - a mixed model with ambiguous enforcement. Remove the AllSites.* permissions from the app registration and re-grant consent so the per-site grants unambiguously govern.'
+        }
+    }
+    elseif ($spScopes -notcontains 'Sites.Selected' -and ($spScopes -join ' ') -notmatch 'FullControl') {
+        Write-Info 'NOTE: if a per-site Sites.Selected grant was made for this app, it is DORMANT - the token does not carry Sites.Selected, so SharePoint still enforces the scope above. The app registration needs the Sites.Selected delegated permission added and admin-consented (and the AllSites.* ones removed).'
     }
 }
 else {
