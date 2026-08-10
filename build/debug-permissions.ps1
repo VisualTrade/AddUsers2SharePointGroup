@@ -331,6 +331,15 @@ $web = Invoke-Spo '/_api/web?$select=Title,Url'
 if (-not $web.Ok) {
     $report.webError = Get-SpoErrorText $web
     Write-Bad "Cannot read the site at all: $($report.webError)"
+    $earlyVerdict = [System.Collections.Generic.List[string]]::new()
+    if ($scopes -match 'Sites\.Selected' -and $scopes -notmatch 'AllSites\.') {
+        $earlyVerdict.Add("CAUSE: under Sites.Selected, even READS fail unless the app holds a per-site grant on THIS exact site - so the app's grant is not reaching $SiteUrl. FIX: have an admin run Get-PnPAzureADAppSitePermission -Site $SiteUrl and confirm THIS app id ($ClientId) is listed with the FullControl role. Watch for: a grant made on a differently spelled site URL, a grant made to a different app id, or a very recent grant still propagating (retry after ~15 minutes).")
+    }
+    else {
+        $earlyVerdict.Add("CAUSE: the site cannot be read with this token. Check that the site URL is correct and that the signed-in account has access to it in the browser; if the token also lacks SharePoint scopes (see above), fix consent first.")
+    }
+    foreach ($v in $earlyVerdict) { Write-Host "`n$v" -ForegroundColor Yellow }
+    $report.verdict = $earlyVerdict
     Write-Info 'Everything below depends on site access; report written with what we have.'
     $report | ConvertTo-Json -Depth 8 | Set-Content $ReportPath
     Write-Host "`nReport written to $ReportPath" -ForegroundColor Yellow
