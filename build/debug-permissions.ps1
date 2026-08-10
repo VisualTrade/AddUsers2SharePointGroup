@@ -56,7 +56,12 @@ param(
 
     # Where to write the JSON report (default: AddUsers-PermissionReport-<time>.json
     # in the current directory).
-    [string]$ReportPath
+    [string]$ReportPath,
+
+    # Override the requested token scope. Default is <resource>/.default, mirroring the
+    # add-in. Useful to isolate enforcement behavior, e.g. request ONLY the per-site
+    # model with: -Scope https://tenant.sharepoint.com/Sites.Selected
+    [string]$Scope
 )
 
 Set-StrictMode -Version Latest
@@ -251,10 +256,14 @@ $permissionBits = [ordered]@{
 }
 
 # ---------------------------------------------------------------------------
-# 1. Acquire a token exactly like the add-in does (resource/.default)
+# 1. Acquire a token exactly like the add-in does (resource/.default),
+#    unless -Scope overrides it for an isolation experiment.
 # ---------------------------------------------------------------------------
-Write-Step "Sign-in 1: $resource/.default (what the add-in requests)"
-$script:AccessToken = Get-InteractiveToken -Scope "$resource/.default"
+$requestedScope = if ($Scope) { $Scope } else { "$resource/.default" }
+$report.requestedScope = $requestedScope
+$scopeLabel = if ($Scope) { 'explicit override - NOT what the add-in requests' } else { 'what the add-in requests' }
+Write-Step "Sign-in 1: $requestedScope ($scopeLabel)"
+$script:AccessToken = Get-InteractiveToken -Scope $requestedScope
 $claims = ConvertFrom-Jwt $script:AccessToken
 
 $tokenInfo = [ordered]@{
